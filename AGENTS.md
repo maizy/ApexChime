@@ -43,7 +43,7 @@ The decisions below describe the current behavior, including the follow-up chang
 | `Schedule.cs` | Saved data model, parsing, deadline calculations, recurrence, delivery, and ordering. |
 | `StateStore.cs` | Local JSON storage. |
 | `Alerts.cs`, `AlertWindow.xaml` | Sound options and playback, alert lifetime and grouping, banner, and Win32 window interop. |
-| `build.ps1`, `.github/workflows/build.yml` | Portable publishing and GitHub Actions artifact uploads. |
+| `build.ps1`, `.github/workflows/build.yml`, `CHANGELOG.md` | Portable builds, GitHub Actions artifacts, and tag-driven GitHub releases with changelog notes. |
 
 Use the [.NET 10 SDK for Windows](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) to develop or build. Publish both architectures from the repository root in PowerShell.
 
@@ -54,13 +54,15 @@ Use the [.NET 10 SDK for Windows](https://dotnet.microsoft.com/en-us/download/do
 
 The outputs are `dist/win-x64/ApexChime.exe` and `dist/win-arm64/ApexChime.exe`. Each is one self-contained executable with sound assets and the runtime included. The app needs no installer or separately installed runtime. If a running executable prevents replacement, publish to a fresh directory so existing timers can continue running.
 
-GitHub Actions uses `windows-2025` and the .NET 10 SDK to publish both architectures on pushes, pull requests, and manual runs. The repository code is MIT. The bundled audio has the separate CC0 notice above. Keep `bin/`, `obj/`, and `dist/` out of source control.
+GitHub Actions uses `windows-2025` and the .NET 10 SDK to build artifacts for both architectures on pushes, pull requests, and manual runs. Pushing a `vX.Y.Z` tag runs a release job after both builds succeed. The tag must match the project version in `ApexChime.csproj`. Update the manifest version alongside the project version and add a matching `## vX.Y.Z` section to `CHANGELOG.md` for curated notes. GitHub generates notes if the section is absent. The release assets are `ApexChime-win-x64.exe` and `ApexChime-win-arm64.exe`. Keep these names stable for the README download links.
+
+The repository code is MIT. The bundled audio has the separate CC0 notice above. Keep `bin/`, `obj/`, and `dist/` out of source control.
 
 Keep the public README brief, with the screenshot near the top. The user asked to omit the app version, reminder clock-format and message-length details, the first-run reminder, schedule sorting details, and the location of settings from the README. Those details belong here.
 
 ## Verification and session handoff
 
-- The first commit created in this session was `1044a74` (`Initial ApexChime release`). The subsequent timer, window, and sound refinements were made in the working tree. Check `git status` before using this note to infer what is committed. A GitHub Actions run was not observed during the session.
+- The first commit was `1044a74` (`Initial ApexChime release`). The timer, window, and sound refinements followed in `9568551` (`Refine timers, window placement, and alert sounds`).
 - Built both x64 and Arm64 as single-file executables and checked their PE architecture headers. Windows runtime checks were on x64. Arm64 execution was not verified.
 - Local smoke checks covered parsing and time separators, descriptions, midnight rollover and repeated daylight-saving times, daily recurrence and deletion, JSON persistence, the one-hour display boundary, normal and maximized window restoration, unavailable monitor placement, sound selection and migration, the 15-second alert lifetime without focus transfer, and the 30-second completed-row lifetime. A portable x64 smoke test also covered background startup, second-launch handoff, and closing to the tray.
 - The session used temporary verification projects and isolated settings under `obj/`. They are not a tracked automated test suite. For future verification, use isolated settings and leave the user's live reminders and autostart registration intact.

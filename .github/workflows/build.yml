@@ -1,4 +1,4 @@
-name: Build ApexChime
+name: Build and release ApexChime
 
 on:
   push:
@@ -21,9 +21,56 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Publish portable executable
         shell: pwsh
-        run: ./build.ps1 -Architecture ${{ matrix.architecture }}
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+        run: |
+          ./build.ps1 -Architecture $env:ARCHITECTURE
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force dist/release | Out-Null
+          Copy-Item "dist/win-$env:ARCHITECTURE/ApexChime.exe" "dist/release/ApexChime-win-$env:ARCHITECTURE.exe"
       - uses: actions/upload-artifact@v6
         with:
           name: ApexChime-win-${{ matrix.architecture }}
-          path: dist/win-${{ matrix.architecture }}/ApexChime.exe
+          path: dist/release/ApexChime-win-${{ matrix.architecture }}.exe
+          compression-level: 0
           if-no-files-found: error
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: ApexChime-win-*
+          path: release-assets
+          merge-multiple: true
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $version = ([xml](Get-Content -Raw ApexChime.csproj)).Project.PropertyGroup.Version
+          if ($tag -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' -or $tag -cne "v$version") {
+              throw "Release tag '$tag' must match the project version 'v$version' and use vX.Y.Z."
+          }
+
+          $pattern = '(?ms)^## ' + [regex]::Escape($tag) + '[ \t]*\r?\n(.*?)(?=^## |\z)'
+          $section = [regex]::Match((Get-Content -Raw CHANGELOG.md), $pattern)
+          $notes = $section.Groups[1].Value.Trim()
+          $noteOptions = @('--generate-notes')
+          if ($notes) {
+              $notesPath = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+              Set-Content -LiteralPath $notesPath -Value $notes -Encoding utf8
+              $noteOptions = @('--notes-file', $notesPath)
+          }
+
+          gh release create $tag release-assets/ApexChime-win-x64.exe release-assets/ApexChime-win-arm64.exe `
+              --repo $env:GITHUB_REPOSITORY --verify-tag --title "ApexChime $version" @noteOptions
+          exit $LASTEXITCODE

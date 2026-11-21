@@ -1,0 +1,29 @@
+name: Build ApexChime
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    strategy:
+      matrix:
+        architecture: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Publish portable executable
+        shell: pwsh
+        run: ./build.ps1 -Architecture ${{ matrix.architecture }}
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ApexChime-win-${{ matrix.architecture }}
+          path: dist/win-${{ matrix.architecture }}/ApexChime.exe
+          if-no-files-found: error

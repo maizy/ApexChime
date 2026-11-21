@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <Version>0.0.1</Version>
+    <Authors>Nikita Kovalev and codex</Authors>
+    <Company>Nikita Kovalev and codex</Company>
+    <Product>ApexChime</Product>
+    <Description>Timers and daily reminders for sim racing</Description>
+    <PackageId>dev.maizy.ApexChime</PackageId>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\ApexChime.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="Assets\ApexChime.ico" />
+    <Resource Include="Assets\ApexChime.png" />
+  </ItemGroup>
+</Project>

@@ -28,6 +28,10 @@ Install the [.NET 10 SDK for Windows](https://dotnet.microsoft.com/en-us/downloa
 
 The script writes `dist/win-x64/ApexChime.exe` or `dist/win-arm64/ApexChime.exe`. GitHub Actions builds both architectures and uploads each executable as an artifact.
 
+## Author
+
+Nikita Kovalev · vibecoded with codex
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

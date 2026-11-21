@@ -17,5 +17,6 @@
   <ItemGroup>
     <Resource Include="Assets\ApexChime.ico" />
     <Resource Include="Assets\ApexChime.png" />
+    <EmbeddedResource Include="Assets\Sounds\*.wav" />
   </ItemGroup>
 </Project>

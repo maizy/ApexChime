@@ -5,13 +5,14 @@
         WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowActivated="False" ShowInTaskbar="False" Focusable="False"
         FontFamily="Segoe UI" UseLayoutRounding="True">
-  <Border Style="{StaticResource Card}" BorderBrush="#81964C" Padding="14">
+  <Border Style="{StaticResource Card}" Background="#C01C2022" BorderBrush="#CC81964C" Padding="14">
     <DockPanel>
       <Image Width="37" Height="37" Source="Assets/ApexChime.png" Margin="0,0,10,0"
              DockPanel.Dock="Left" VerticalAlignment="Top" />
       <StackPanel>
         <TextBlock x:Name="Heading" Foreground="{StaticResource Accent}" FontWeight="SemiBold" FontSize="13" />
-        <TextBlock x:Name="Message" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
+        <TextBlock x:Name="Message" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap"
+                   LineHeight="24" LineStackingStrategy="BlockLineHeight" MaxHeight="72" TextTrimming="CharacterEllipsis" />
         <TextBlock x:Name="More" Foreground="{StaticResource Muted}" Margin="0,4,0,0" />
       </StackPanel>
     </DockPanel>

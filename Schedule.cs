@@ -1,7 +1,9 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 
 namespace ApexChime;
 
@@ -9,9 +11,12 @@ internal sealed class SavedState
 {
     public bool NotificationsEnabled { get; set; } = true;
     public AlertSound Sound { get; set; } = AlertSound.Default;
+    public SavedWindowPlacement? WindowPlacement { get; set; }
     public List<Countdown> Timers { get; set; } = [];
     public List<DailyReminder> Reminders { get; set; } = [new(22, 0, "go to sleep")];
 }
+
+internal sealed record SavedWindowPlacement(int Left, int Top, double Width, double Height, bool Maximized);
 
 internal sealed record Countdown(DateTimeOffset Due, string Title)
 {
@@ -34,10 +39,10 @@ internal sealed class Schedule(SavedState state)
 
     public static Countdown? ParseTimer(string input, DateTimeOffset now, TimeZoneInfo zone)
     {
-        input = input.Trim();
-        if (input.StartsWith('!'))
+        var (time, description) = SplitTimerInput(input);
+        if (time.StartsWith('!'))
         {
-            if (!TryReadClock(input[1..], out var hour, out var minute))
+            if (!TryReadClock(time[1..], out var hour, out var minute))
                 return null;
 
             var date = LocalDate(now, zone);
@@ -49,39 +54,37 @@ internal sealed class Schedule(SavedState state)
 
                 var due = ClockInstants(target, zone).FirstOrDefault(candidate => candidate > now);
                 if (due != default && due - now <= TimeSpan.FromHours(24))
-                    return new(due, $"Until {hour:00}:{minute:00}");
+                    return new(due, description ?? DefaultTimerTitle((int)Math.Ceiling((due - now).TotalMinutes)));
             }
             return null;
         }
 
         int totalMinutes;
-        if (input.Contains(':'))
+        if (TryReadNumber(time, out var minutes))
         {
-            var parts = input.Split(':');
-            if (parts.Length != 2 || !ReadNumber(parts[0], out var hours) || hours > 24 ||
-                parts[1].Length != 2 || !ReadNumber(parts[1], out var minutes) || minutes > 59)
-                return null;
-
+            totalMinutes = minutes;
+        }
+        else if (TryReadHoursAndMinutes(time, maxHours: 24, out var hours, out minutes))
+        {
             totalMinutes = hours * 60 + minutes;
         }
-        else if (!ReadNumber(input, out totalMinutes))
+        else
         {
             return null;
         }
 
-        return totalMinutes is > 0 and <= 1440 ? StartTimer(totalMinutes, now) : null;
+        return totalMinutes is > 0 and <= 1440 ? StartTimer(totalMinutes, now, description) : null;
     }
 
-    public static Countdown StartTimer(int minutes, DateTimeOffset now) =>
-        new(now.ToUniversalTime().AddMinutes(minutes), $"{minutes} min timer");
+    public static Countdown StartTimer(int minutes, DateTimeOffset now, string? description = null) =>
+        new(now.ToUniversalTime().AddMinutes(minutes), description ?? DefaultTimerTitle(minutes));
 
     public static bool TryReadClock(string input, out int hour, out int minute)
     {
         hour = minute = 0;
-        var parts = input.Trim().Split(':');
-        return parts.Length == 2 && parts[0].Length is 1 or 2 && parts[1].Length == 2 &&
-            ReadNumber(parts[0], out hour) && hour < 24 &&
-            ReadNumber(parts[1], out minute) && minute < 60;
+        var clock = input.AsSpan().Trim();
+        return clock.Length is >= 4 and <= 6 &&
+            TryReadHoursAndMinutes(clock, maxHours: 23, out hour, out minute, maxHourDigits: 2);
     }
 
     public bool Advance(DateTimeOffset now, TimeZoneInfo zone, List<ScheduledItem> alerts)
@@ -133,8 +136,44 @@ internal sealed class Schedule(SavedState state)
         return timers.Concat(reminders).OrderBy(item => item.Due);
     }
 
-    private static bool ReadNumber(string value, out int result) =>
+    private static (string Time, string? Description) SplitTimerInput(string input)
+    {
+        var parts = input.Split((char[]?)null, 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+            return (parts.FirstOrDefault() ?? "", null);
+
+        var time = parts[0];
+        var hour = time.StartsWith('!') ? time.AsSpan(1) : time.AsSpan();
+        if (TryReadNumber(hour, out var value) && value <= 24)
+        {
+            var tail = parts[1].Split((char[]?)null, 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            // A space followed by a valid two-digit minute can also be the time separator.
+            if (tail[0].Length == 2 && TryReadNumber(tail[0], out var minute) && minute < 60)
+                return ($"{time}:{tail[0]}", tail.Length == 2 ? tail[1] : null);
+        }
+
+        return (time, parts[1]);
+    }
+
+    private static bool TryReadHoursAndMinutes(ReadOnlySpan<char> input, int maxHours, out int hour, out int minute,
+        int maxHourDigits = int.MaxValue)
+    {
+        hour = minute = 0;
+        if (input.Length < 4 || !TryReadNumber(input[^2..], out minute) || minute >= 60)
+            return false;
+
+        var prefix = input[..^2];
+        if (Rune.DecodeLastFromUtf16(prefix, out var separator, out var length) != OperationStatus.Done || Rune.IsDigit(separator))
+            return false;
+
+        var hours = prefix[..^length];
+        return hours.Length <= maxHourDigits && TryReadNumber(hours, out hour) && hour <= maxHours;
+    }
+
+    private static bool TryReadNumber(ReadOnlySpan<char> value, out int result) =>
         int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out result);
+
+    private static string DefaultTimerTitle(int minutes) => $"{minutes} min timer";
 
     private static string ReminderTitle(DailyReminder reminder) =>
         string.IsNullOrEmpty(reminder.Text) ? "Daily reminder" : reminder.Text;

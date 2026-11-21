@@ -106,6 +106,8 @@ public partial class App : Application
     {
         base.OnSessionEnding(e);
         IsExiting = !e.Cancel;
+        if (IsExiting)
+            window?.SaveWindowPlacement();
     }
 
     protected override void OnExit(ExitEventArgs e)

@@ -10,24 +10,55 @@ using Forms = System.Windows.Forms;
 
 namespace ApexChime;
 
-internal enum AlertSound { None, Default, Information, Exclamation, Question, CriticalStop }
+internal enum AlertSound
+{
+    None,
+    Default,
+    // Keep these names readable in settings from earlier builds.
+    Information,
+    Exclamation,
+    Question,
+    CriticalStop,
+    GlassChime,
+    Confirmation,
+    DigitalPing,
+    LowBong,
+    Pluck
+}
 
-internal sealed record SoundOption(AlertSound Sound, string Label, SystemSound? Player);
+internal sealed record SoundOption(AlertSound Sound, string Label, Action? Play);
 
 internal static class AlertAudio
 {
     public static IReadOnlyList<SoundOption> Options { get; } =
     [
-        new(AlertSound.Default, "Windows default", SystemSounds.Beep),
-        new(AlertSound.Information, "Information", SystemSounds.Asterisk),
-        new(AlertSound.Exclamation, "Exclamation", SystemSounds.Exclamation),
-        new(AlertSound.Question, "Question", SystemSounds.Question),
-        new(AlertSound.CriticalStop, "Critical stop", SystemSounds.Hand),
+        new(AlertSound.Default, "Windows default", SystemSounds.Beep.Play),
+        new(AlertSound.GlassChime, "Glass chime", Bundled("glass_001")),
+        new(AlertSound.Confirmation, "Confirmation", Bundled("confirmation_001")),
+        new(AlertSound.DigitalPing, "Digital ping", Bundled("select_003")),
+        new(AlertSound.LowBong, "Low bong", Bundled("bong_001")),
+        new(AlertSound.Pluck, "Pluck", Bundled("pluck_002")),
+        new(AlertSound.CriticalStop, "Critical stop", SystemSounds.Hand.Play),
         new(AlertSound.None, "No sound", null)
     ];
 
-    public static void Play(AlertSound sound) =>
-        (Options.FirstOrDefault(option => option.Sound == sound) ?? Options[0]).Player?.Play();
+    public static SoundOption GetOption(AlertSound sound) =>
+        Options.FirstOrDefault(option => option.Sound == sound) ?? Options[0];
+
+    public static void Play(AlertSound sound) => GetOption(sound).Play?.Invoke();
+
+    private static Action Bundled(string fileName)
+    {
+        var resource = $"ApexChime.Assets.Sounds.{fileName}.wav";
+        var player = new Lazy<SoundPlayer>(() =>
+        {
+            var stream = typeof(AlertAudio).Assembly.GetManifestResourceStream(resource)
+                ?? throw new InvalidOperationException($"Missing bundled sound: {resource}");
+            return new SoundPlayer(stream);
+        });
+
+        return () => player.Value.Play();
+    }
 }
 
 internal sealed class AlertPresenter

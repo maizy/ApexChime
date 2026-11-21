@@ -9,7 +9,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Threading;
+using Forms = System.Windows.Forms;
 
 namespace ApexChime;
 
@@ -20,6 +22,8 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<ScheduleRow> rows = [];
     private readonly AlertPresenter presenter = new();
     private readonly DispatcherTimer ticker = new() { Interval = TimeSpan.FromSeconds(1) };
+    private bool placementPending = true;
+    private bool maximized;
     private bool ready;
     private bool savePending;
 
@@ -28,6 +32,24 @@ public partial class MainWindow : Window
         this.store = store;
         schedule = new(state);
         InitializeComponent();
+        if (state.WindowPlacement is { } placement &&
+            double.IsFinite(placement.Width) && placement.Width > 0 &&
+            double.IsFinite(placement.Height) && placement.Height > 0)
+        {
+            Width = Math.Max(MinWidth, placement.Width);
+            Height = Math.Max(MinHeight, placement.Height);
+            if (placement.Maximized)
+                Loaded += RestoreMaximized;
+        }
+
+        LocationChanged += (_, _) => placementPending = true;
+        SizeChanged += (_, _) => placementPending = true;
+        StateChanged += (_, _) =>
+        {
+            if (WindowState != WindowState.Minimized)
+                maximized = WindowState == WindowState.Maximized;
+            placementPending = true;
+        };
 
         foreach (var minutes in new[] { 3, 5, 8, 10, 15, 20, 25, 30, 45, 60 })
         {
@@ -38,7 +60,13 @@ public partial class MainWindow : Window
 
         ScheduleList.ItemsSource = rows;
         SoundSelector.ItemsSource = AlertAudio.Options;
-        SoundSelector.SelectedItem = AlertAudio.Options.FirstOrDefault(option => option.Sound == state.Sound) ?? AlertAudio.Options[0];
+        var sound = AlertAudio.GetOption(state.Sound);
+        SoundSelector.SelectedItem = sound;
+        if (state.Sound != sound.Sound)
+        {
+            state.Sound = sound.Sound;
+            savePending = true;
+        }
         VersionText.Text = $"v{typeof(App).Assembly.GetName().Version!.ToString(3)}";
         NotificationsToggle.IsChecked = state.NotificationsEnabled;
         try { StartupToggle.IsChecked = StartupRegistration.IsEnabled(); }
@@ -56,11 +84,14 @@ public partial class MainWindow : Window
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        DesktopWindow.UseDarkCaption(new WindowInteropHelper(this).Handle);
+        var handle = new WindowInteropHelper(this).Handle;
+        DesktopWindow.UseDarkCaption(handle);
+        RestoreWindowPosition(handle);
     }
 
     protected override void OnClosing(CancelEventArgs e)
     {
+        SaveWindowPlacement();
         if (Application.Current is App { IsExiting: false })
         {
             e.Cancel = true;
@@ -83,6 +114,7 @@ public partial class MainWindow : Window
         var zone = TimeZoneInfo.Local;
         List<ScheduledItem> alerts = [];
         savePending |= schedule.Advance(now, zone, alerts);
+        CaptureWindowPlacement();
         SaveIfNeeded();
 
         if (alerts.Count > 0 && schedule.State.NotificationsEnabled)
@@ -113,6 +145,60 @@ public partial class MainWindow : Window
         }
 
         EmptySchedule.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RestoreWindowPosition(IntPtr handle)
+    {
+        if (schedule.State.WindowPlacement is { } placement && Forms.Screen.AllScreens.Any(screen =>
+            screen.WorkingArea.Contains(placement.Left + 32, placement.Top + 16)))
+        {
+            DesktopWindow.Move(handle, placement.Left, placement.Top);
+            return;
+        }
+
+        var area = Forms.Screen.FromHandle(handle).WorkingArea;
+        var dpi = VisualTreeHelper.GetDpi(this);
+        if (Width * dpi.DpiScaleX <= area.Width && Height * dpi.DpiScaleY <= area.Height)
+            return;
+
+        Width = Math.Clamp(area.Width / dpi.DpiScaleX, MinWidth, Width);
+        Height = Math.Clamp(area.Height / dpi.DpiScaleY, MinHeight, Height);
+        var left = area.Left + Math.Max(0, (int)((area.Width - Width * dpi.DpiScaleX) / 2));
+        var top = area.Top + Math.Max(0, (int)((area.Height - Height * dpi.DpiScaleY) / 2));
+        DesktopWindow.Move(handle, left, top);
+    }
+
+    private void RestoreMaximized(object sender, RoutedEventArgs e)
+    {
+        Loaded -= RestoreMaximized;
+        WindowState = WindowState.Maximized;
+    }
+
+    internal void SaveWindowPlacement()
+    {
+        CaptureWindowPlacement();
+        SaveIfNeeded();
+    }
+
+    private void CaptureWindowPlacement()
+    {
+        if (!placementPending || !IsLoaded || !IsVisible)
+            return;
+
+        var bounds = RestoreBounds;
+        if (bounds.IsEmpty)
+            return;
+
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var placement = new SavedWindowPlacement(
+            (int)Math.Round(bounds.Left * dpi.DpiScaleX), (int)Math.Round(bounds.Top * dpi.DpiScaleY),
+            bounds.Width, bounds.Height, maximized);
+        placementPending = false;
+        if (placement == schedule.State.WindowPlacement)
+            return;
+
+        schedule.State.WindowPlacement = placement;
+        savePending = true;
     }
 
     private void RunTimer(object sender, RoutedEventArgs e) => RunCustomTimer();
@@ -222,6 +308,7 @@ public partial class MainWindow : Window
             return;
 
         schedule.State.Sound = option.Sound;
+        AlertAudio.Play(option.Sound);
         CommitChange();
     }
 
@@ -270,7 +357,12 @@ internal sealed class ScheduleRow(ScheduledItem item) : INotifyPropertyChanged
     public void Update(DateTimeOffset due, DateTimeOffset now, TimeZoneInfo zone)
     {
         var seconds = (int)Math.Ceiling((due - now).TotalSeconds);
-        var remaining = due <= now ? "Done" : FormattableString.Invariant($"{seconds / 60:00}:{seconds % 60:00}");
+        var remaining = seconds switch
+        {
+            <= 0 => "Done",
+            > 3600 => FormattableString.Invariant($"{seconds / 3600:00}:{seconds / 60 % 60:00}:{seconds % 60:00}"),
+            _ => FormattableString.Invariant($"{seconds / 60:00}:{seconds % 60:00}")
+        };
         if (Remaining != remaining)
         {
             Remaining = remaining;

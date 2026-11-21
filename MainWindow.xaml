@@ -1,7 +1,7 @@
 <Window x:Class="ApexChime.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="ApexChime" Width="642" Height="758" MinWidth="550" MinHeight="670"
+        Title="ApexChime" Width="642" Height="820" MinWidth="550" MinHeight="670"
         WindowStartupLocation="CenterScreen" Background="{StaticResource Background}"
         Foreground="{StaticResource Text}" FontFamily="Segoe UI" FontSize="13"
         UseLayoutRounding="True" Icon="Assets/ApexChime.ico">
@@ -29,10 +29,12 @@
                Foreground="{StaticResource Muted}" />
         <DockPanel>
           <Button DockPanel.Dock="Right" Content="_Run" Style="{StaticResource Action}" Margin="7,0,0,0" Click="RunTimer" />
-          <TextBox x:Name="TimerInput" MaxLength="10" KeyDown="TimerInputKeyDown" />
+          <TextBox x:Name="TimerInput" KeyDown="TimerInputKeyDown" />
         </DockPanel>
         <TextBlock Text="15 for minutes  ·  5:23 for hours and minutes  ·  !14:00 for a finish time"
                    Margin="0,6,0,0" Foreground="{StaticResource Muted}" TextWrapping="Wrap" />
+        <TextBlock Text="Add a space and a description, e.g. 15 Check fuel."
+                   Margin="0,2,0,0" Foreground="{StaticResource Muted}" TextWrapping="Wrap" />
       </StackPanel>
     </Border>
     <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,0,0,10">
@@ -47,7 +49,7 @@
           <StackPanel Margin="0,0,7,0">
             <Label Target="{Binding ElementName=ReminderTime}" Content="Time (HH:MM)" Padding="0,0,0,4"
                    Foreground="{StaticResource Muted}" />
-            <TextBox x:Name="ReminderTime" MaxLength="5" KeyDown="ReminderInputKeyDown" />
+            <TextBox x:Name="ReminderTime" KeyDown="ReminderInputKeyDown" />
           </StackPanel>
           <StackPanel Grid.Column="1">
             <Label Target="{Binding ElementName=ReminderText}" Content="Message (optional)" Padding="0,0,0,4"
